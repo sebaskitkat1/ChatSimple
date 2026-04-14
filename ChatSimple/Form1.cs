@@ -28,9 +28,10 @@ namespace ChatSimple
                 if (result == DialogResult.Yes)
                 {
                     int port = int.Parse(txtPuerto.Text);
+                    string ip=getIp();
                     TcpListener server = new TcpListener(IPAddress.Any, port);
                     server.Start();
-                    rtbHistorial.AppendText("Servidor iniciado en el puerto: "+ port + "\n");
+                    rtbHistorial.AppendText("Servidor iniciado en la ip y el puerto: "+ip +":"+ port + "\n");
 
                     // Esperar a que un cliente se conecte de manera asíncrona
                     cliente = await server.AcceptTcpClientAsync();
