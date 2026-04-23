@@ -3,6 +3,8 @@ using System.IO;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.ComponentModel;
+using System.Xml.Xsl;
+using Microsoft.VisualBasic;
 namespace ChatSimple
 {
     public partial class Form1 : Form
@@ -10,8 +12,9 @@ namespace ChatSimple
         private TcpClient cliente;
         private StreamReader reader;
         private StreamWriter writer;
+        private Conexion conexion=new Conexion();
 
-        private string nombreCliente;
+        private string nombreCliente="";
 
         private List<StreamWriter> clientesConectados = new List<StreamWriter>();
 
@@ -23,7 +26,7 @@ namespace ChatSimple
             InitializeComponent();
         }
 
-        private async void btnIniciarServidor_Click(object sender, EventArgs e)
+        private async void button1_Click(object sender, EventArgs e)
         {
             DialogResult respuesta = MessageBox.Show("¿Esta aplicacion " +
                 "es el Servidor?", "Sistema", MessageBoxButtons.YesNo,
@@ -54,7 +57,7 @@ namespace ChatSimple
                 }
                 else
                 {
-                    nombreCliente = Microsoft.VisualBasic.Interaction.InputBox("Ingrese su nombre:", "Sistema", "Cliente");
+                    nombreCliente = Interaction.InputBox("Ingrese su nombre:", "Sistema", "Cliente");
                     string ip = txtIP.Text;
                     int port = int.Parse(txtPuerto.Text);
 
@@ -62,6 +65,9 @@ namespace ChatSimple
                     rtbHistorial.AppendText("Conectando al servidor...\r\n");
 
                     await cliente.ConnectAsync(ip, port);
+
+                    conexion.cargarHistorial(rtbHistorial);
+
                     rtbHistorial.AppendText("¡Conectado a la sala como " + nombreCliente + "!\r\n");
 
 
@@ -70,6 +76,7 @@ namespace ChatSimple
                     reader = new StreamReader(stream);
                     writer = new StreamWriter(stream) { AutoFlush = true };
 
+                    await writer.WriteLineAsync(nombreCliente);
                     _ = RecibirMensajes();
 
                 }
@@ -91,6 +98,8 @@ namespace ChatSimple
             // Añadimos el nuevo cliente a nuestra lista segura
             lock (lockClientes) { clientesConectados.Add(clientWriter); }
 
+            string nombreCliente = await clientReader.ReadLineAsync();
+
             try
             {
                 while (cliente.Connected)
@@ -102,11 +111,13 @@ namespace ChatSimple
                     {
                         // Mostrar en la pantalla del servidor
                         rtbHistorial.Invoke((MethodInvoker)delegate {
-                            rtbHistorial.AppendText("Cliente " + nombreCliente + " dice: " + mensajeRecibido + "\r\n");
+                            rtbHistorial.AppendText($"{nombreCliente}: {mensajeRecibido}\r\n");
                         });
 
+                        conexion.ejecutarComando($"INSERT INTO historial (usuario, mensaje) VALUES ('{nombreCliente}', '{mensajeRecibido}')");
+
                         // Reenviar a todos los demás clientes de la sala
-                        DifundirMensaje(nombreCliente+" dice: " + mensajeRecibido);
+                        DifundirMensaje($"{nombreCliente}: {mensajeRecibido}", clientWriter);
                     }
                     else
                     {
@@ -123,13 +134,13 @@ namespace ChatSimple
                 // Si el cliente se desconecta, lo quitamos de la lista
                 lock (lockClientes) { clientesConectados.Remove(clientWriter); }
                 rtbHistorial.Invoke((MethodInvoker)delegate {
-                    rtbHistorial.AppendText("Cliente " + nombreCliente + " abandonó la sala.\r\n");
+                    rtbHistorial.AppendText($"{nombreCliente} abandono la sala.\r\n");
                 });
                 cliente.Close();
             }
         }
 
-        private async void DifundirMensaje(string mensaje)
+        private async void DifundirMensaje(string mensaje, StreamWriter excluir=null)
         {
             List<StreamWriter> copiaClientes;
 
@@ -138,6 +149,7 @@ namespace ChatSimple
 
             foreach (var clientWriter in copiaClientes)
             {
+                if (clientWriter == excluir) continue;
                 try
                 {
                     await clientWriter.WriteLineAsync(mensaje);
@@ -198,7 +210,7 @@ namespace ChatSimple
             }
         }
 
-        private async void btnEnviar_Click(object sender, EventArgs e)
+        private async void button2_Click(object sender, EventArgs e)
         {
             string mensaje = txtMensaje.Text;
             if (string.IsNullOrWhiteSpace(mensaje)) return;
@@ -210,6 +222,8 @@ namespace ChatSimple
                     // Si soy el servidor, muestro mi mensaje y lo difundo a todos
                     rtbHistorial.AppendText("Server Admin: " + mensaje + "\r\n");
                     DifundirMensaje("Server Admin: " + mensaje);
+
+                    conexion.ejecutarComando($"INSERT INTO historial (usuario, mensaje) VALUES ('Server Admin', '{mensaje}')");
                 }
                 else if (cliente != null && cliente.Connected)
                 {
